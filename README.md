@@ -1,0 +1,158 @@
+# SkillBag Workflows
+
+connect it with git@github.com:Skillbag-ai/skillbag-workflows.git.
+
+Use it when a workspace needs small, composable procedures that maintain local
+work products over time: chronological logs, handoff notes, status reports,
+decision records, checklists, lightweight retrospectives, or recurring review
+packets.
+
+It is meant for prompts like:
+
+- "add this to the project log"
+- "create a dated progress note for this folder"
+- "turn today's work into a handoff note"
+- "capture this decision in the local decision log"
+- "prepare a weekly status summary from recent notes"
+
+The skills here sit between low-level utilities and domain-specific document,
+resource, or media processing. They should describe durable ways of working
+rather than one-off file transformations.
+
+This repository is itself a valid SkillBag source:
+
+- repository instructions live in [AGENTS.md](./AGENTS.md)
+- installed skills live under [`.skills/`](./.skills/)
+- the skill catalog lives at [`.skills/SKILLS.md`](./.skills/SKILLS.md)
+
+The skills here are meant to be installed into other workspaces as
+dependencies. They should stay generic, local-first, and independent of one
+organization's reporting cadence, folder taxonomy, or note-taking style.
+
+## Available Skills
+
+### [skillbag-chrono-log](./.skills/skillbag-chrono-log/SKILL.md)
+
+Creates or updates a folder-local chronological Markdown log while keeping the
+newest dated section first.
+
+Key parameters:
+
+- `target-folder` and `text` are required
+- `filename` defaults to `log.md`
+- `date` defaults to today
+- `mode` supports `append` and `replace`
+- `weekday-locale` supports English by default, several common weekday-label
+  languages, or `none`
+
+Behavior:
+
+- writes only `<target-folder>/<filename>` and creates the target folder when
+  needed
+- adds new dated sections in reverse chronological order
+- inserts same-day entries at the top of the existing day section
+- can replace a single date section for consolidated daily summaries
+- uses `skillbag-python-ensure` before running the bundled Python helper
+
+Use this for project journals, incident histories, progress logs, dated folder
+records, or other local notes where the newest entry should stay easy to find.
+
+## Planned Skill Areas
+
+These areas are intentionally documented as roadmap, not as installed skills.
+Only skills listed in [`.skills/SKILLS.md`](./.skills/SKILLS.md) are currently
+available.
+
+- handoff-note: summarize current state, next steps, blockers, and useful
+  links for another person or a later agent session
+- decision-log: append or update lightweight architecture, product, project,
+  or operations decisions with context, options, outcome, and follow-up
+- status-report: create weekly, sprint, or milestone status updates from local
+  logs and notes without imposing one organization's reporting template
+- work-session-recap: convert a coding, research, or operations session into
+  concise outcomes, changed files, open questions, and next actions
+- checklist-runner: execute a local Markdown checklist, mark completed items,
+  and capture notes or exceptions without hiding unfinished work
+- retrospective-note: collect what changed, what worked, what was difficult,
+  and what should be adjusted next time
+- review-packet: gather relevant local files, links, logs, and summaries into
+  a review-ready Markdown brief
+- follow-up-tracker: maintain a local follow-up list with owners, due dates,
+  status, and source context
+
+## Repository Direction
+
+Workflow skills should be durable routines that help agents keep work
+organized across time. A good workflow skill usually:
+
+- produces or maintains a human-readable local artifact
+- has clear write boundaries
+- composes with more specialized repositories such as `skillbag-docs`,
+  `skillbag-media`, `skillbag-resources`, and `skillbag-utils`
+- avoids assuming a specific company process, meeting format, or folder naming
+  scheme
+- records uncertainty and unfinished work instead of smoothing it away
+
+Skills that only provide runtime helpers belong in
+[`skillbag-utils`](https://github.com/Skillbag-ai/skillbag-utils). Skills that
+primarily transform file formats belong in
+[`skillbag-docs`](https://github.com/Skillbag-ai/skillbag-docs) or
+[`skillbag-media`](https://github.com/Skillbag-ai/skillbag-media). Skills that
+organize corpora and search stores belong in
+[`skillbag-resources`](https://github.com/Skillbag-ai/skillbag-resources).
+
+## How To Use
+
+Typical usage is to add this repository as a SkillBag dependency from another
+workspace, usually alongside
+[`skillbag-utils`](https://github.com/Skillbag-ai/skillbag-utils) for shared
+runtime helpers such as Python checks.
+
+Example dependency declaration:
+
+```yaml
+dependencies:
+  - name: skillbag-chrono-log
+    version: main
+    source: git@github.com:Skillbag-ai/skillbag-workflows.git
+```
+
+Once installed, users can ask in natural language. For example, an agent with
+these skills available can understand that "add this to the project log",
+"append today's note", and "replace today's progress summary" all map to
+`skillbag-chrono-log`.
+
+## Design Notes
+
+Workflow skills should make ongoing work easier to resume, audit, and hand off.
+They should not decide the user's project management system for them. Prefer
+small Markdown artifacts, explicit parameters, and local conventions that can
+be overridden by the consuming workspace.
+
+When a workflow depends on a deterministic helper script, declare that
+relationship explicitly with dependencies and `#use/<skill-name>` tags.
+
+## Repository Layout
+
+- [AGENTS.md](./AGENTS.md): repository-level installation metadata
+- [README.md](./README.md): project overview
+- [CONTRIBUTING.md](./CONTRIBUTING.md): contribution guidance
+- [GOVERNANCE.md](./GOVERNANCE.md): workflow-skill repository governance
+- [SUSTAINABILITY.md](./SUSTAINABILITY.md): funding and maintenance model
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md): collaboration standards
+- [SECURITY.md](./SECURITY.md): security reporting guidance
+- [CHANGELOG.md](./CHANGELOG.md): notable repository changes
+- [LICENSE.md](./LICENSE.md): MIT license
+- [`.skills/SKILLS.md`](./.skills/SKILLS.md): low-cost skill discovery catalog
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Security
+
+See [SECURITY.md](./SECURITY.md).
+
+## License
+
+Released under the MIT license. See [LICENSE.md](./LICENSE.md).
