@@ -20,8 +20,10 @@
       "detected_path": null
     },
     "scheduler": {
-      "type": "none",
-      "installed": false
+      "installed": true,
+      "platform": "linux",
+      "timer": "skillbag-cronjobs.timer",
+      "installed_at": "2026-05-28T09:00:00+02:00"
     }
   },
   "children": ["projects/example/cronjobs/jobs.json"],
@@ -34,7 +36,8 @@
 
 Child installations use `"type": "child"` and do not define
 `check_interval_seconds`. The root installation owns the scheduler and checks
-all child `jobs.json` files listed in `children`.
+all child `jobs.json` files listed in `children`. Root installation should
+install the scheduler immediately, before any background jobs exist.
 
 ## Job Object
 
@@ -80,6 +83,8 @@ One-time jobs use:
 - `last_run_at` records the last actual execution attempt.
 - `last_status` SHOULD be one of `never`, `executed`, `failed`, `delayed`,
   `aborted`, `timeout`, `needs-input`, or `skipped`.
+- Cleanup MAY remove one-time jobs with `executed` status, or failed one-time
+  jobs only after the latest job log entry is checked.
 
 ## Cron Expressions
 
@@ -100,4 +105,3 @@ Supported syntax:
 
 Weekday `0` and `7` both mean Sunday. When both day-of-month and day-of-week
 are restricted, classic cron OR semantics apply.
-

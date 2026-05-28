@@ -1,11 +1,11 @@
 ---
 name: skillbag-cronjobs
-description: Maintain and run local SkillBag cron-style agent jobs from jobs.json, including pending-job reminders and background execution. #run/always #use/skillbag-python-ensure
+description: Maintain, run, and clean up local SkillBag cron-style agent jobs from jobs.json, including scheduler installation, pending-job reminders, and background execution. #run/always #use/skillbag-python-ensure
 dependencies:
   - name: skillbag-python-ensure
 metadata:
   author: backupdev
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 ## Parameters
@@ -35,6 +35,9 @@ optional:
 - Treat each cronjobs folder as the write boundary for its `jobs.json`,
   `.locks/`, and `<job-id>.md` job logs. Installing a child cronjobs folder MAY
   update the root `jobs.json` `children` array.
+- Root installation MUST install the OS scheduler immediately after creating or
+  confirming the root `jobs.json`. Ask the user before running the install
+  command because it writes outside the workspace.
 - Use classic five-field cron expressions:
   `minute hour day-of-month month day-of-week`.
 - Do not use a persistent `running` field. The helper uses `.locks/<job-id>.lock`
@@ -74,10 +77,10 @@ Confirm these choices with the user before initializing:
 - root scheduler interval, default once per hour
 - background agent command, default discovered/confirmed `codex`
 
-Initialize a root installation:
+Initialize a root installation and install the OS scheduler:
 
 ```bash
-python3 .skills/skillbag-cronjobs/scripts/cronjobs.py init . --cronjobs-folder cronjobs
+python3 .skills/skillbag-cronjobs/scripts/cronjobs.py init . --cronjobs-folder cronjobs --install-scheduler
 ```
 
 Initialize a child installation and register it in the root installation:
@@ -107,6 +110,30 @@ python3 .skills/skillbag-cronjobs/scripts/cronjobs.py scheduler install .
 
 Ask before installing scheduler artifacts because this writes outside the
 workspace on Linux, macOS, and Windows.
+
+## Cleanup
+
+Use cleanup to remove finished one-time jobs from the root and all child
+`jobs.json` files. Cleanup candidates are:
+
+- one-time jobs with `last_status=executed`
+- one-time jobs with failed, delayed, aborted, timeout, needs-input, or skipped
+  status only after the latest job log entry has `Checked: true`
+
+Always list candidates before deleting anything:
+
+```bash
+python3 .skills/skillbag-cronjobs/scripts/cronjobs.py cleanup .
+```
+
+After the user approves the displayed list, apply cleanup:
+
+```bash
+python3 .skills/skillbag-cronjobs/scripts/cronjobs.py cleanup . --apply --confirm
+```
+
+Cleanup removes each candidate from its `jobs.json` and removes the matching
+`<job-id>.md` result log. Do not run cleanup without explicit user approval.
 
 ## Interactive Runs
 

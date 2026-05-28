@@ -4,6 +4,13 @@ All notable changes to this repository should be documented in this file.
 
 The format is intentionally simple while the project remains a draft.
 
+## v0.2.1
+
+- Updated `skillbag-cronjobs` so root installation installs the OS scheduler
+  immediately after confirmation.
+- Added cleanup support that lists removable one-time jobs across root and
+  child cronjobs folders before removing approved jobs and their Markdown logs.
+
 ## v0.2.0
 
 - Added `skillbag-cronjobs` for maintaining local `jobs.json` cron-style

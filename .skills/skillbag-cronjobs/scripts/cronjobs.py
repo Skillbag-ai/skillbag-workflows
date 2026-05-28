@@ -42,6 +42,7 @@ STATUS_LABELS = {
     "needs-input": "Needs Input",
     "skipped": "Skipped",
 }
+FAILURE_STATUSES = {"failed", "delayed", "aborted", "timeout", "needs-input", "skipped"}
 MONTH_NAMES = {
     "JAN": 1,
     "FEB": 2,
@@ -694,7 +695,15 @@ def cmd_init(args: argparse.Namespace) -> int:
         "agent_detected_path": detected_path,
         "agent_found": detected_path is not None,
         "parent_updated": parent_updated,
+        "scheduler_installed": False,
     }
+    if args.install_scheduler:
+        if args.child:
+            raise ValueError("child installations cannot install the root scheduler")
+        install_result = install_scheduler(root, args.cronjobs_folder, args.scheduler_platform, args.scheduler_name)
+        update_scheduler_state(root, args.cronjobs_folder, install_result)
+        result["scheduler_installed"] = True
+        result["scheduler"] = install_result
     print(json_dump(result), end="")
     return 0
 
@@ -905,6 +914,120 @@ def cmd_ack(args: argparse.Namespace) -> int:
     return 0
 
 
+def latest_log_checked(cronjobs_dir: Path, job_id: str) -> bool | None:
+    log_file = cronjobs_dir / f"{job_id}.md"
+    if not log_file.exists():
+        return None
+    text = log_file.read_text(encoding="utf-8")
+    match = re.search(r"^\*\*Checked\*\*:\s*(true|false)\s*$", text, flags=re.IGNORECASE | re.MULTILINE)
+    if match is None:
+        return None
+    return match.group(1).lower() == "true"
+
+
+def cleanup_candidates(root: Path, cronjobs_folder: str, now: dt.datetime) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    installations = load_installations(root, cronjobs_folder)
+    for inst in installations:
+        jobs = inst.data.get("jobs", [])
+        if not isinstance(jobs, list):
+            continue
+        for job in jobs:
+            if not isinstance(job, dict):
+                continue
+            job_id = job.get("id")
+            if validate_job_id(job_id) is not None:
+                continue
+            schedule = job.get("schedule")
+            if not isinstance(schedule, dict) or schedule.get("type") != "once":
+                continue
+            active, _lock_info = active_lock_info(inst.cronjobs_dir, job_id, now)
+            if active:
+                continue
+            status = str(job.get("last_status") or "never")
+            checked = latest_log_checked(inst.cronjobs_dir, job_id)
+            remove = status == "executed" or (status in FAILURE_STATUSES and checked is True)
+            if not remove:
+                continue
+            log_file = inst.cronjobs_dir / f"{job_id}.md"
+            candidates.append(
+                {
+                    "id": job_id,
+                    "jobs_json": str(inst.jobs_json.relative_to(root) if inst.jobs_json.is_relative_to(root) else inst.jobs_json),
+                    "log_file": str(log_file.relative_to(root) if log_file.is_relative_to(root) else log_file),
+                    "log_exists": log_file.exists(),
+                    "last_status": status,
+                    "checked": checked,
+                    "last_run_at": job.get("last_run_at"),
+                    "last_result": job.get("last_result"),
+                }
+            )
+    return candidates
+
+
+def apply_cleanup(root: Path, cronjobs_folder: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_jobs_json: dict[Path, set[str]] = {}
+    for candidate in candidates:
+        jobs_path = resolve_child_jobs_json(root, str(candidate["jobs_json"]))
+        by_jobs_json.setdefault(jobs_path, set()).add(str(candidate["id"]))
+
+    removed: list[dict[str, Any]] = []
+    for jobs_path, ids in by_jobs_json.items():
+        data = read_json(jobs_path)
+        jobs = data.get("jobs", [])
+        if not isinstance(jobs, list):
+            continue
+        remaining = []
+        cronjobs_dir = jobs_path.parent
+        for job in jobs:
+            if isinstance(job, dict) and job.get("id") in ids:
+                job_id = str(job["id"])
+                log_file = cronjobs_dir / f"{job_id}.md"
+                checked = latest_log_checked(cronjobs_dir, job_id)
+                log_removed = False
+                if log_file.exists():
+                    log_file.unlink()
+                    log_removed = True
+                removed.append(
+                    {
+                        "id": job_id,
+                        "jobs_json": str(jobs_path.relative_to(root) if jobs_path.is_relative_to(root) else jobs_path),
+                        "log_file": str(log_file.relative_to(root) if log_file.is_relative_to(root) else log_file),
+                        "log_removed": log_removed,
+                        "last_status": job.get("last_status"),
+                        "checked": checked,
+                    }
+                )
+            else:
+                remaining.append(job)
+        data["jobs"] = remaining
+        write_json(jobs_path, data)
+    return removed
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    root = Path(args.context_root).resolve()
+    now = parse_datetime(args.now) if args.now else now_local()
+    assert now is not None
+    candidates = cleanup_candidates(root, args.cronjobs_folder, now)
+    result: dict[str, Any] = {
+        "checked_at": isoformat(now),
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "applied": False,
+        "removed": [],
+    }
+    if args.apply:
+        if not args.confirm:
+            result["error"] = "cleanup requires --confirm when --apply is used"
+            print(json_dump(result), end="")
+            return 2
+        result["removed"] = apply_cleanup(root, args.cronjobs_folder, candidates)
+        result["applied"] = True
+    print(json_dump(result), end="")
+    return 0
+
+
 def runner_args(context_root: Path, cronjobs_folder: str) -> list[str]:
     script = Path(__file__).resolve()
     python = sys.executable or "python3"
@@ -1015,34 +1138,52 @@ def cmd_scheduler_print(args: argparse.Namespace) -> int:
 
 def cmd_scheduler_install(args: argparse.Namespace) -> int:
     root = Path(args.context_root).resolve()
-    scheduler_platform = detect_scheduler_platform(args.platform)
+    result = install_scheduler(root, args.cronjobs_folder, args.platform, args.name)
+    update_scheduler_state(root, args.cronjobs_folder, result)
+    print(json_dump(result), end="")
+    return 0
+
+
+def install_scheduler(context_root: Path, cronjobs_folder: str, raw_platform: str, name: str) -> dict[str, Any]:
+    root = context_root.resolve()
+    scheduler_platform = detect_scheduler_platform(raw_platform)
     if scheduler_platform == "linux":
         unit_dir = Path.home() / ".config/systemd/user"
         unit_dir.mkdir(parents=True, exist_ok=True)
-        for filename, text in systemd_units(root, args.cronjobs_folder, args.name).items():
+        for filename, text in systemd_units(root, cronjobs_folder, name).items():
             atomic_write_text(unit_dir / filename, text)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "--user", "enable", "--now", f"{args.name}.timer"], check=True)
-        result = {"installed": True, "platform": "linux", "unit_dir": str(unit_dir), "timer": f"{args.name}.timer"}
+        subprocess.run(["systemctl", "--user", "enable", "--now", f"{name}.timer"], check=True)
+        result = {"installed": True, "platform": "linux", "unit_dir": str(unit_dir), "timer": f"{name}.timer"}
     elif scheduler_platform == "macos":
-        label = args.name if "." in args.name else f"ai.skillbag.{args.name}"
+        label = name if "." in name else f"ai.skillbag.{name}"
         plist_path = Path.home() / "Library/LaunchAgents" / f"{label}.plist"
         plist_path.parent.mkdir(parents=True, exist_ok=True)
-        plist_path.write_bytes(launchd_plist(root, args.cronjobs_folder, label))
+        plist_path.write_bytes(launchd_plist(root, cronjobs_folder, label))
         subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist_path)], check=False)
         subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist_path)], check=True)
         result = {"installed": True, "platform": "macos", "plist": str(plist_path), "label": label}
     elif scheduler_platform == "windows":
-        command = windows_powershell(root, args.cronjobs_folder, args.name)
+        command = windows_powershell(root, cronjobs_folder, name)
         subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
             check=True,
         )
-        result = {"installed": True, "platform": "windows", "task": args.name}
+        result = {"installed": True, "platform": "windows", "task": name}
     else:
         raise ValueError(f"unsupported scheduler platform: {scheduler_platform}")
-    print(json_dump(result), end="")
-    return 0
+    result["installed_at"] = isoformat(now_local())
+    return result
+
+
+def update_scheduler_state(root: Path, cronjobs_folder: str, result: dict[str, Any]) -> None:
+    jobs_json = jobs_json_for(root, cronjobs_folder)
+    data = read_json(jobs_json)
+    installation = data.setdefault("installation", {})
+    if not isinstance(installation, dict):
+        raise ValueError(f"{jobs_json} installation must be an object")
+    installation["scheduler"] = result
+    write_json(jobs_json, data)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1062,6 +1203,9 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--prompt-mode", choices=["argument", "stdin"], default="argument")
     init.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     init.add_argument("--not-versioned", action="store_true")
+    init.add_argument("--install-scheduler", action="store_true")
+    init.add_argument("--scheduler-platform", choices=["auto", "linux", "macos", "windows"], default="auto")
+    init.add_argument("--scheduler-name", default="skillbag-cronjobs")
     init.set_defaults(func=cmd_init)
 
     validate = subparsers.add_parser("validate", help="validate root and child jobs.json files")
@@ -1101,6 +1245,14 @@ def build_parser() -> argparse.ArgumentParser:
     ack.add_argument("--jobs-json")
     ack.add_argument("--job-id", required=True)
     ack.set_defaults(func=cmd_ack)
+
+    cleanup = subparsers.add_parser("cleanup", help="list or remove completed one-time jobs")
+    cleanup.add_argument("context_root")
+    cleanup.add_argument("--cronjobs-folder", default=DEFAULT_FOLDER)
+    cleanup.add_argument("--apply", action="store_true")
+    cleanup.add_argument("--confirm", action="store_true")
+    cleanup.add_argument("--now")
+    cleanup.set_defaults(func=cmd_cleanup)
 
     scheduler = subparsers.add_parser("scheduler", help="print or install OS scheduler setup")
     scheduler_sub = scheduler.add_subparsers(dest="scheduler_command", required=True)
