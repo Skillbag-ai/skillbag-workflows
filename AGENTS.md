@@ -1,4 +1,4 @@
-SKILLBAG WORKFLOWS v0.1.0
+SKILLBAG WORKFLOWS v0.2.0
 
 This repository is a `SKILLBAG` source.
 Distributed skills live under `.skills/`.

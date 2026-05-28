@@ -11,6 +11,7 @@ It is meant for prompts like:
 
 - "add this to the project log"
 - "create a dated progress note for this folder"
+- "remind me when local agent cron jobs are due"
 - "turn today's work into a handoff note"
 - "capture this decision in the local decision log"
 - "prepare a weekly status summary from recent notes"
@@ -56,6 +57,26 @@ Behavior:
 
 Use this for project journals, incident histories, progress logs, dated folder
 records, or other local notes where the newest entry should stay easy to find.
+
+### [skillbag-cronjobs](./.skills/skillbag-cronjobs/SKILL.md)
+
+Maintains local cron-style agent jobs from a versioned `jobs.json`, with
+interactive reminders, background execution, child cronjobs folders, lock files
+to prevent parallel runs, and chronological per-job result logs.
+
+Key behavior:
+
+- supports classic five-field cron expressions and one-time jobs
+- uses the root installation's OS scheduler to check root and child jobs
+- runs background jobs through a configured agent command, defaulting to
+  discovered or confirmed `codex`
+- reminds about interactive jobs but waits for the user's explicit GO
+- logs each job result to `<cronjobs-folder>/<job-id>.md` with newest entries
+  first
+- uses `skillbag-python-ensure` before running the bundled Python helper
+
+Use this for local recurring agent tasks that should stay visible, auditable,
+and under user control.
 
 ## Planned Skill Areas
 
