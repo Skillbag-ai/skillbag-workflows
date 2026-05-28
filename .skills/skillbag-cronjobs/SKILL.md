@@ -5,7 +5,7 @@ dependencies:
   - name: skillbag-python-ensure
 metadata:
   author: backupdev
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 ## Parameters
@@ -76,6 +76,8 @@ Confirm these choices with the user before initializing:
 - root or child installation
 - root scheduler interval, default once per hour
 - background agent command, default discovered/confirmed `codex`
+- background agent arguments, default
+  `exec --sandbox workspace-write --skip-git-repo-check --ephemeral`
 
 Initialize a root installation and install the OS scheduler:
 
@@ -110,6 +112,13 @@ python3 .skills/skillbag-cronjobs/scripts/cronjobs.py scheduler install .
 
 Ask before installing scheduler artifacts because this writes outside the
 workspace on Linux, macOS, and Windows.
+
+For Codex background jobs, validate the configured `agent.args` before relying
+on the scheduler. `codex exec` does not accept `--ask-for-approval`; use
+`--sandbox workspace-write`, `--ephemeral`, `--skip-git-repo-check`, or a
+user-approved `--dangerously-bypass-approvals-and-sandbox` instead. Prefer
+`prompt_mode=stdin` so long prompts are not passed through the process
+argument list.
 
 ## Cleanup
 

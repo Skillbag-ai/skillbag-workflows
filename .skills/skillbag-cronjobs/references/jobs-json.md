@@ -14,10 +14,11 @@
     "check_interval_seconds": 3600,
     "agent": {
       "command": "codex",
-      "args": ["exec", "--ask-for-approval", "never"],
-      "prompt_mode": "argument",
+      "args": ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--ephemeral"],
+      "prompt_mode": "stdin",
       "timeout_seconds": 1800,
-      "detected_path": null
+      "detected_path": null,
+      "env": {}
     },
     "scheduler": {
       "installed": true,
@@ -85,6 +86,18 @@ One-time jobs use:
   `aborted`, `timeout`, `needs-input`, or `skipped`.
 - Cleanup MAY remove one-time jobs with `executed` status, or failed one-time
   jobs only after the latest job log entry is checked.
+
+## Agent Invocation
+
+For Codex, keep `args` compatible with `codex exec`. Do not put
+`--ask-for-approval` after `exec`; that option is not accepted by `codex exec`.
+Use `--sandbox workspace-write` for ordinary workspace automation,
+`--ephemeral` to avoid persistent session-state writes, and
+`--skip-git-repo-check` for non-git workspaces. Use
+`--dangerously-bypass-approvals-and-sandbox` only after explicit user approval.
+
+Set `prompt_mode` to `stdin` unless the configured agent requires prompts as a
+command-line argument.
 
 ## Cron Expressions
 

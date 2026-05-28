@@ -22,7 +22,8 @@ SCHEMA_VERSION = 1
 DEFAULT_FOLDER = "cronjobs"
 DEFAULT_INTERVAL_SECONDS = 3600
 DEFAULT_TIMEOUT_SECONDS = 1800
-DEFAULT_AGENT_ARGS = ["exec", "--ask-for-approval", "never"]
+DEFAULT_AGENT_ARGS = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--ephemeral"]
+DEFAULT_PROMPT_MODE = "stdin"
 JOB_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 WINDOWS_RESERVED = {
     "con",
@@ -574,8 +575,21 @@ def run_agent(inst: Installation, job: dict[str, Any], due: DueInfo, started_at:
     args = config.get("args", DEFAULT_AGENT_ARGS)
     if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
         args = DEFAULT_AGENT_ARGS
-    prompt_mode = str(config.get("prompt_mode") or "argument")
+    prompt_mode = str(config.get("prompt_mode") or DEFAULT_PROMPT_MODE)
     timeout = int(config.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))
+    detected_path = config.get("detected_path")
+    executable = command
+    if (
+        isinstance(detected_path, str)
+        and detected_path
+        and not Path(command).is_absolute()
+        and Path(detected_path).exists()
+    ):
+        executable = detected_path
+    env = os.environ.copy()
+    configured_env = config.get("env", {})
+    if isinstance(configured_env, dict):
+        env.update({str(key): str(value) for key, value in configured_env.items()})
     prompt = (
         "You are executing a SkillBag cronjob.\n\n"
         f"Jobs file: {inst.jobs_json}\n"
@@ -586,7 +600,7 @@ def run_agent(inst: Installation, job: dict[str, Any], due: DueInfo, started_at:
         "human input, permissions, or feedback, stop and say exactly what is needed.\n\n"
         f"Job prompt:\n{job.get('prompt', '')}\n"
     )
-    command_line = [command, *args]
+    command_line = [executable, *args]
     stdin_text = None
     if prompt_mode == "stdin":
         stdin_text = prompt
@@ -600,10 +614,11 @@ def run_agent(inst: Installation, job: dict[str, Any], due: DueInfo, started_at:
             capture_output=True,
             cwd=str(inst.root),
             timeout=timeout,
+            env=env,
             check=False,
         )
     except FileNotFoundError:
-        return "failed", f"Agent command not found: {command}"
+        return "failed", f"Agent command not found: {executable}"
     except subprocess.TimeoutExpired as exc:
         output = (exc.stdout or "") + ("\n" + exc.stderr if exc.stderr else "")
         return "timeout", concise_result(output or f"Timed out after {timeout} seconds")
@@ -643,6 +658,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     (cronjobs_dir / ".locks").mkdir(exist_ok=True)
     detected_path = shutil.which(args.agent_command)
     agent_args = args.agent_arg if args.agent_arg is not None else list(DEFAULT_AGENT_ARGS)
+    agent_env = {}
+    if os.environ.get("CODEX_HOME"):
+        agent_env["CODEX_HOME"] = os.environ["CODEX_HOME"]
     if jobs_json.exists():
         data = read_json(jobs_json)
     else:
@@ -658,6 +676,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                 "prompt_mode": args.prompt_mode,
                 "timeout_seconds": args.timeout_seconds,
                 "detected_path": detected_path,
+                "env": agent_env,
             },
             "scheduler": {
                 "type": "none",
@@ -734,6 +753,35 @@ def validate_schedule(job: dict[str, Any]) -> list[str]:
     return errors
 
 
+def validate_agent_config(inst: Installation) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    config = agent_config(inst)
+    command = str(config.get("command") or "")
+    args = config.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
+        errors.append("agent.args must be an array of strings")
+        return errors, warnings
+    if Path(command).name == "codex" or command == "codex":
+        if args and args[0] == "exec":
+            exec_args = args[1:]
+        else:
+            exec_args = args
+        if "--ask-for-approval" in exec_args or "-a" in exec_args:
+            errors.append(
+                "codex exec does not accept --ask-for-approval; use --sandbox, "
+                "--ephemeral, or --dangerously-bypass-approvals-and-sandbox"
+            )
+        if "--ephemeral" not in exec_args:
+            warnings.append("codex background jobs should include --ephemeral to avoid persistent session-state writes")
+        if "--skip-git-repo-check" not in exec_args:
+            warnings.append("codex background jobs should include --skip-git-repo-check for non-git workspaces")
+        prompt_mode = str(config.get("prompt_mode") or DEFAULT_PROMPT_MODE)
+        if prompt_mode == "argument":
+            warnings.append("codex background jobs should prefer prompt_mode=stdin for long prompts and systemd runs")
+    return errors, warnings
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     root = Path(args.context_root).resolve()
     errors: list[str] = []
@@ -755,6 +803,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
         config = installation_config(inst)
         if not inst.is_root and "check_interval_seconds" in config:
             errors.append(f"{prefix}: child installations must not define check_interval_seconds")
+        agent_errors, agent_warnings = validate_agent_config(inst)
+        errors.extend(f"{prefix}: {message}" for message in agent_errors)
+        warnings.extend(f"{prefix}: {message}" for message in agent_warnings)
         for index, job in enumerate(jobs):
             if not isinstance(job, dict):
                 errors.append(f"{prefix}: jobs[{index}] must be an object")
@@ -1200,7 +1251,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--check-interval-seconds", type=int, default=DEFAULT_INTERVAL_SECONDS)
     init.add_argument("--agent-command", default="codex")
     init.add_argument("--agent-arg", action="append")
-    init.add_argument("--prompt-mode", choices=["argument", "stdin"], default="argument")
+    init.add_argument("--prompt-mode", choices=["argument", "stdin"], default=DEFAULT_PROMPT_MODE)
     init.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     init.add_argument("--not-versioned", action="store_true")
     init.add_argument("--install-scheduler", action="store_true")

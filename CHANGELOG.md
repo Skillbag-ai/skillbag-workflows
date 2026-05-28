@@ -4,6 +4,13 @@ All notable changes to this repository should be documented in this file.
 
 The format is intentionally simple while the project remains a draft.
 
+## v0.2.2
+
+- Fixed the default `skillbag-cronjobs` Codex invocation so it uses
+  `codex exec` options that are accepted in noninteractive runs.
+- Added validation warnings for Codex background job args that can fail under
+  `codex exec`, including `--ask-for-approval` after `exec`.
+
 ## v0.2.1
 
 - Updated `skillbag-cronjobs` so root installation installs the OS scheduler
