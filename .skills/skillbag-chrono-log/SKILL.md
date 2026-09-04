@@ -1,11 +1,11 @@
 ---
 name: skillbag-chrono-log
-description: Create or update a folder-local chronological Markdown log with the newest dated section first. #use/skillbag-python-ensure
+description: "Create or update a folder-local chronological Markdown log with the newest dated section first. #use/skillbag-python-ensure"
 dependencies:
   - name: skillbag-python-ensure
 metadata:
   author: backupdev
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 ## Parameters

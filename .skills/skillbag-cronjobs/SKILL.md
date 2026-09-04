@@ -1,11 +1,11 @@
 ---
 name: skillbag-cronjobs
-description: Maintain, run, and clean up local SkillBag cron-style agent jobs from jobs.json, including scheduler installation, pending-job reminders, and background execution. #run/always #use/skillbag-python-ensure
+description: "Maintain, run, and clean up local SkillBag cron-style agent jobs from jobs.json, including scheduler installation, pending-job reminders, and background execution. #run/always #use/skillbag-python-ensure"
 dependencies:
   - name: skillbag-python-ensure
 metadata:
   author: backupdev
-  version: 1.1.1
+  version: 1.1.2
 ---
 
 ## Parameters

@@ -3,12 +3,14 @@
 connect it with git@github.com:Skillbag-ai/skillbag-workflows.git.
 
 Use it when a workspace needs small, composable procedures that maintain local
-work products over time: chronological logs, handoff notes, status reports,
-decision records, checklists, lightweight retrospectives, or recurring review
-packets.
+work products over time: bounded case contexts, chronological logs, handoff
+notes, status reports, decision records, checklists, lightweight
+retrospectives, or recurring review packets.
 
 It is meant for prompts like:
 
+- "open a case for this matter"
+- "resume this case and reconcile its document inventory"
 - "add this to the project log"
 - "create a dated progress note for this folder"
 - "remind me when local agent cron jobs are due"
@@ -31,6 +33,30 @@ dependencies. They should stay generic, local-first, and independent of one
 organization's reporting cadence, folder taxonomy, or note-taking style.
 
 ## Available Skills
+
+### [skillbag-case-context](./.skills/skillbag-case-context/SKILL.md)
+
+Creates and maintains a bounded, resumable context for a non-routine matter
+without turning it into a full project-management system.
+
+Key behavior:
+
+- defaults new cases to `cases/YYYY-MM-short-name/`, while respecting a
+  configured collection, exact case path, or established layout
+- separates compact current state in `CONTEXT.md`, recursively inventoried
+  source documents, and chronological history in `log.md`
+- preserves existing `files/` and `files.md` conventions without automatic
+  migration
+- uses `skillbag-pdf-ocr` for unreadable source PDFs while preserving originals
+- distinguishes evidence, user-provided statements, inferences, and unresolved
+  questions
+- supports lightweight `active`, `waiting`, and `closed` states
+- creates reminders only on explicit request and uses `skillbag-cronjobs` when
+  available
+
+Use this for incidents, administrative procedures, disputes, requests,
+decisions, or follow-ups that need evidence and history across multiple
+sessions, but do not need a roadmap or recurring process model.
 
 ### [skillbag-chrono-log](./.skills/skillbag-chrono-log/SKILL.md)
 
@@ -111,6 +137,8 @@ organized across time. A good workflow skill usually:
 
 - produces or maintains a human-readable local artifact
 - has clear write boundaries
+- separates current state, source evidence, and historical events when those
+  roles would otherwise become confused
 - composes with more specialized repositories such as `skillbag-docs`,
   `skillbag-media`, `skillbag-resources`, and `skillbag-utils`
 - avoids assuming a specific company process, meeting format, or folder naming
@@ -142,8 +170,9 @@ dependencies:
 ```
 
 Once installed, users can ask in natural language. For example, an agent with
-these skills available can understand that "add this to the project log",
-"append today's note", and "replace today's progress summary" all map to
+these skills available can understand that "open a case for this matter" maps
+to `skillbag-case-context`, while "add this to the project log", "append
+today's note", and "replace today's progress summary" map to
 `skillbag-chrono-log`.
 
 ## Design Notes

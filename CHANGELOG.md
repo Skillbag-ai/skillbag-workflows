@@ -4,6 +4,17 @@ All notable changes to this repository should be documented in this file.
 
 The format is intentionally simple while the project remains a draft.
 
+## v0.3.0
+
+- Added `skillbag-case-context` for bounded, resumable case folders with
+  current context, recursively inventoried source documents, chronological
+  history, lightweight lifecycle states, and evidence-aware working rules.
+- Integrated required chronological logging and PDF OCR dependencies plus
+  optional explicit reminders through `skillbag-cronjobs`.
+- Quoted lifecycle-tagged skill descriptions so standard YAML parsers preserve
+  the tags, with patch releases `skillbag-chrono-log` 1.0.1 and
+  `skillbag-cronjobs` 1.1.2.
+
 ## v0.2.2
 
 - Fixed the default `skillbag-cronjobs` Codex invocation so it uses
